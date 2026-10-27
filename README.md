@@ -1,0 +1,40 @@
+# OpenPizza 0.1
+
+A native C/SDL2 reconstruction of Pizza Tycoon for Windows x64 and macOS.
+
+The game loads graphics, fonts, sound, music and initial tables directly from
+**your own Pizza Tycoon English DOS V2.0 installation**. Original game assets
+and executables are not distributed. No startup bundle or emulator is required.
+
+Windows: extract the release ZIP, copy the original game directory to `PIZZA`
+beside `PizzaTycoon.exe`, and run the launcher. `PT_GAME_DATA_DIR` may point to
+another game directory. Missing or incompatible assets produce a message.
+Saves and logs are stored under `%LOCALAPPDATA%\Pizza Tycoon`.
+
+Version 0.1 is an early release. Startup, New Game through the city map and
+native save/load are exercised by release checks. Some gameplay paths still
+stop explicitly when unsupported; full-game parity is not established.
+Windows builds are smoke-tested with Wine; testing on Windows hardware is pending.
+
+On macOS install SDL2 and run:
+
+```sh
+make native
+./build/pizza-native --data /path/to/PIZZA
+```
+
+All 495 fixed resource files are checked by SHA-256 before play. The unmodified
+English V2.0 `PT.EXE` (or `PT_Original.EXE`) must be 470411 bytes with SHA-256
+`9cce82355b466fc0e47c51ae1de4ba850a666b5f12c3831ee19ba5c4c4ef6add`.
+The executable is read as data to extract initial tables; it is never executed.
+Other languages and game revisions are not supported by this release.
+
+`tools/resources.py` converts graphics to labeled PNG sprite sheets, sound to
+WAV, and music to editable event/instrument tables. It reconstructs the selected
+original media files exactly; see `tools/resource_formats/README.md`.
+
+The source is organized into subsystem files. Include `pizza.h` for the main
+application API or the subsystem header listed in `SOURCE_LAYOUT.md`.
+
+Program source: GPL v3 only, copyright 2026 Drevton. The OPL chip model retains
+its LGPL license and attribution. Original game data retains its owners' rights.

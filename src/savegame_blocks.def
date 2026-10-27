@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 Drevton
+// DOS save sections in file order. Included with SAVE_BLOCK(id, data, size, encoded, after_read).
+// Data expressions are evaluated only when the native block list is built.
+// Read hooks run immediately after their section, preserving original ordering.
+
+#ifdef SAVE_BLOCK
+SAVE_BLOCK(MISSION_MODE, &state->is_mission_mode, sizeof(state->is_mission_mode), false, NULL)
+SAVE_BLOCK(PLAYER_COUNT, &state->num_interactive_players, sizeof(state->num_interactive_players), false, NULL)
+SAVE_BLOCK(APPLE, &pt_saved_apple_record(apple)->arr1E,
+    offsetof(PTSavedApple, field_65) - offsetof(PTSavedApple, arr1E), true, NULL)
+SAVE_BLOCK(SESSION, &savegame_sect_0, sizeof(savegame_sect_0), true, normalize_loaded_session)
+SAVE_BLOCK(RAW_STATE, &pt_memory.globals.saved_serialized_age_taste_preferences,
+    sizeof(pt_memory.globals.saved_serialized_age_taste_preferences), false, NULL)
+SAVE_BLOCK(
+    PLAYERS, pt_memory.globals.saved_serialized_players, sizeof(pt_memory.globals.saved_serialized_players), true, NULL)
+SAVE_BLOCK(CHARACTERS, characters, sizeof(characters), true, restore_loaded_player_lists)
+SAVE_BLOCK(GLOBAL_BALANCE, global_balance, sizeof(global_balance), true, NULL)
+SAVE_BLOCK(MISSION_EXPENSES, pt_memory.globals.saved_serialized_mission_expenses,
+    sizeof(pt_memory.globals.saved_serialized_mission_expenses), true, NULL)
+SAVE_BLOCK(MISSION_RECEIPTS, pt_memory.globals.saved_serialized_mission_receipts,
+    sizeof(pt_memory.globals.saved_serialized_mission_receipts), true, NULL)
+SAVE_BLOCK(PREVIOUS_MONTH_EXPENSES, pt_memory.globals.saved_serialized_previous_month_expenses,
+    sizeof(pt_memory.globals.saved_serialized_previous_month_expenses), true, NULL)
+SAVE_BLOCK(PREVIOUS_MONTH_RECEIPTS, pt_memory.globals.saved_serialized_previous_month_receipts,
+    sizeof(pt_memory.globals.saved_serialized_previous_month_receipts), true, NULL)
+SAVE_BLOCK(PLAYER_LOANS, pt_memory.globals.saved_serialized_player_loans,
+    sizeof(pt_memory.globals.saved_serialized_player_loans), true, NULL)
+SAVE_BLOCK(PLAYER_INVESTMENTS, pt_memory.globals.saved_serialized_player_investments,
+    sizeof(pt_memory.globals.saved_serialized_player_investments), true, NULL)
+SAVE_BLOCK(WEAPON_PRICES, weapon_base_price, sizeof(weapon_base_price), false, NULL)
+SAVE_BLOCK(MISSION_GOALS, pt_memory.globals.saved_mission_goal_columns,
+    sizeof(pt_memory.globals.saved_mission_goal_columns), false, NULL)
+SAVE_BLOCK(MISSION_DAYS, pt_memory.globals.saved_mission_day_columns,
+    sizeof(pt_memory.globals.saved_mission_day_columns), false, NULL)
+SAVE_BLOCK(MISSION_MONTHS, pt_memory.globals.saved_mission_month_columns,
+    sizeof(pt_memory.globals.saved_mission_month_columns), false, NULL)
+SAVE_BLOCK(MISSION_YEARS, pt_memory.globals.saved_mission_year_columns,
+    sizeof(pt_memory.globals.saved_mission_year_columns), false, NULL)
+#endif
+
+// Town header precedes suppliers in both directions.
+
+#ifdef TOWN_HEADER_BLOCK
+TOWN_HEADER_BLOCK(POI_COUNT, &town->num_poi, sizeof(town->num_poi))
+TOWN_HEADER_BLOCK(TRENDS, pt_town_load_trends(town), sizeof(PTTownSavedTrends))
+TOWN_HEADER_BLOCK(REMAINDER, &town->word992, sizeof(town->word992))
+#endif
+
+// data, fixed size, optional dynamic size, post-load step.
+// STAFF's extent is evaluated only after STATE supplied num_staff.
+
+#ifdef TOWN_STATE_BLOCK
+TOWN_STATE_BLOCK(STATE, &ramtown, sizeof(ramtown), NULL, PT_TOWN_READ_COUNTS)
+TOWN_STATE_BLOCK(STAFF, &g_staff[1], 0, town_staff_bytes, PT_TOWN_READ_STAFF)
+TOWN_STATE_BLOCK(STAFF_TYPES, staff_is_type, sizeof(staff_is_type), NULL, PT_TOWN_READ_NONE)
+TOWN_STATE_BLOCK(STAFF_HATRED, staff_hates_player, sizeof(staff_hates_player), NULL, PT_TOWN_READ_NONE)
+#endif

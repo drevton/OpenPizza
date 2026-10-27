@@ -1,0 +1,6 @@
+build/
+PIZZA/
+assets/
+*.ptdisk
+*.jsonl
+.DS_Store
