@@ -33,7 +33,8 @@ CORE += src/savegame_initial.c
 CORE += src/runtime_state.c
 CORE += src/ai_day.c
 CORE += src/host_io.c
-NATIVE_HEADERS := $(wildcard src/*.h src/*.def) vendor/pt_opl_adapter.h
+NATIVE_PLATFORM_LIBS := -lcurl
+NATIVE_HEADERS := $(wildcard src/*.h src/*.def) vendor/pt_opl_adapter.h vendor/puff/puff.c vendor/puff/puff.h
 NATIVE_HEADERS += vendor/nuked-opl3/opl3.h vendor/nuked-opl3/opl3.c
 
 # Native gameplay is compiled directly.
@@ -57,7 +58,7 @@ build/windows:
 	mkdir -p $@
 
 build/windows/pizza-native.exe: $(NATIVE_GAME_SOURCES) src/native.c src/display.c $(NATIVE_HEADERS) | build/windows
-	$(WINDOWS_CC) $(WINDOWS_CFLAGS) -I"$(WINDOWS_SDL)/include/SDL2" $(NATIVE_GAME_SOURCES) src/native.c src/display.c -L"$(WINDOWS_SDL)/lib" $(WINDOWS_LDFLAGS) -municode $(WINDOWS_LIBS) -o $@
+	$(WINDOWS_CC) $(WINDOWS_CFLAGS) -I"$(WINDOWS_SDL)/include/SDL2" $(NATIVE_GAME_SOURCES) src/native.c src/display.c -L"$(WINDOWS_SDL)/lib" $(WINDOWS_LDFLAGS) -municode $(WINDOWS_LIBS) -lwinhttp -o $@
 
 build/windows/PizzaTycoon.exe: tools/windows_launcher.c src/types.h | build/windows
 	$(WINDOWS_CC) $(WINDOWS_CFLAGS) $(WINDOWS_LDFLAGS) -municode -mwindows $< -lshell32 -o $@
@@ -67,7 +68,7 @@ build:
 
 
 build/pizza-native: $(NATIVE_GAME_SOURCES) src/native.c src/display.c $(NATIVE_HEADERS) | build
-	$(CC) $(CFLAGS) $$(sdl2-config --cflags) $(NATIVE_GAME_SOURCES) src/native.c src/display.c $$(sdl2-config --libs) -Wl,-map,build/pizza-native-link.map -o $@
+	$(CC) $(CFLAGS) $$(sdl2-config --cflags) $(NATIVE_GAME_SOURCES) src/native.c src/display.c $$(sdl2-config --libs) $(NATIVE_PLATFORM_LIBS) -Wl,-map,build/pizza-native-link.map -o $@
 
 clean:
 	rm -rf build

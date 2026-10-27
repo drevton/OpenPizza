@@ -23,6 +23,18 @@ size_t pt_game_data_file_count(void);
 bool pt_game_data_verify(PTGameDataReader reader, void *context, FILE *errors);
 bool pt_game_data_verify_assets(FILE *errors);
 bool pt_game_data_verify_directory(const char *directory, FILE *errors);
+bool pt_game_data_verify_installation(const char *directory, FILE *errors);
+// Return an owned verified directory, or a new installation destination with installed set to false.
+char *pt_game_data_find_directory(const char *requested, bool *installed);
+typedef bool (*PTGameDataProgress)(void *context, unsigned phase, size_t done, size_t total);
+typedef enum PTGameDataInstallResult {
+  PT_GAME_DATA_INSTALLED,
+  PT_GAME_DATA_CANCELED,
+  PT_GAME_DATA_INSTALL_FAILED
+} PTGameDataInstallResult;
+PTGameDataInstallResult pt_game_data_download(const char *directory, PTGameDataProgress progress, void *context);
+PTGameDataInstallResult pt_game_data_install_archive(
+    const char *archive, const char *directory, PTGameDataProgress progress, void *context);
 
 bool pt_game_data_read_file(const char *directory, const char *name, u8 **data, size_t *size);
 bool pt_game_data_load_directory(const char *directory);

@@ -3,6 +3,7 @@
 #ifndef PT_DISPLAY_H
 #define PT_DISPLAY_H
 #include "types.h"
+#include "game_data.h"
 #include <stddef.h>
 enum {
   PT_DISPLAY_QUIT = 1,
@@ -24,6 +25,8 @@ typedef struct PTDisplayEvent {
   u32 key, modifiers;
   u64 milliseconds;
 } PTDisplayEvent;
+bool pt_display_download_game_data(
+    const char *destination, PTGameDataInstallResult (*download)(const char *, PTGameDataProgress, void *));
 int pt_display_open(const char *title, unsigned scale, int hidden);
 int pt_display_audio_write(const u8 *samples, size_t size);
 int pt_display_present(const u8 *rgb, size_t size, u8 *readback);

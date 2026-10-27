@@ -27,12 +27,6 @@ static void directory(const wchar_t *path) {
   if (error != ERROR_SUCCESS && error != ERROR_ALREADY_EXISTS && error != ERROR_FILE_EXISTS)
     fail(L"Cannot create the save directory. Check PT_SAVE_DIRECTORY and folder permissions.");
 }
-static void check_assets(const wchar_t *path) {
-  DWORD flags = GetFileAttributesW(path);
-  if (flags == INVALID_FILE_ATTRIBUTES || !(flags & FILE_ATTRIBUTE_DIRECTORY))
-    fail(L"Game assets could not be found.\n\nCopy your Pizza Tycoon English DOS V2.0 game files into "
-         L"the PIZZA folder beside PizzaTycoon.exe, or set PT_GAME_DATA_DIR to their location.");
-}
 
 static bool asset_error(const wchar_t *path) {
   HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -92,7 +86,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, wchar_t *text, int s
     fail(L"PT_GAME_DATA_DIR is too long.");
   if (!length)
     join(boot, base, L"PIZZA");
-  check_assets(boot);
   length = GetEnvironmentVariableW(L"PT_SAVE_DIRECTORY", folder, PT_PATH_CAPACITY);
   if (length >= PT_PATH_CAPACITY)
     fail(L"PT_SAVE_DIRECTORY is too long.");
@@ -160,13 +153,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, wchar_t *text, int s
   CloseHandle(lock);
   if (code) {
     join(path, folder, L"last-run.log");
-    MessageBoxW(NULL,
-        asset_error(path)
-            ? L"Game assets are missing, damaged or from an incompatible version.\n\n"
-              L"Restore the English DOS V2.0 game assets. See last-run.log in the save directory for the failing files."
-            : L"The game stopped. See last-run.log in the save directory for details.",
-        L"Pizza Tycoon",
-        MB_OK | MB_ICONERROR);
+    if (!asset_error(path))
+      MessageBoxW(NULL,
+          L"The game stopped. See last-run.log in the save directory for details.",
+          L"Pizza Tycoon",
+          MB_OK | MB_ICONERROR);
   }
   return (int)code;
 }

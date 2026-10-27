@@ -160,6 +160,321 @@ bool pt_game_data_verify_directory(const char *directory, FILE *errors) {
   return okay;
 }
 
+static char *data_copy_path(const char *path) {
+  char *copy = malloc(strlen(path) + 1);
+  if (copy)
+    strcpy(copy, path);
+  return copy;
+}
+char *pt_game_data_find_directory(const char *requested, bool *installed) {
+  *installed = false;
+  if (requested && pt_game_data_verify_installation(requested, NULL)) {
+    char *copy = data_copy_path(requested);
+    *installed = copy != NULL;
+    return copy;
+  }
+  char *base = pt_host_game_data_directory();
+  char *destination = base ? malloc(strlen(base) + 16) : NULL;
+  char *available = NULL;
+  if (destination) {
+    for (unsigned i = 1; i <= 100; ++i) {
+      if (i == 1)
+        strcpy(destination, base);
+      else
+        snprintf(destination, strlen(base) + 16, "%s-%u", base, i);
+      if (!pt_host_path_exists(destination)) {
+        if (!available)
+          available = data_copy_path(destination);
+      } else if (pt_game_data_verify_installation(destination, NULL)) {
+        free(base);
+        free(available);
+        *installed = true;
+        return destination;
+      }
+    }
+  }
+  free(base);
+  free(destination);
+  destination = available;
+  fputs("Game data: required English DOS V2.0 assets were not found or failed verification.\n", stderr);
+  return destination;
+}
+
+// The archive is fetched only after an explicit user choice. Its bytes never enter a release package.
+#include "../vendor/puff/puff.c"
+#include <errno.h>
+#include <unistd.h>
+
+static const PTGameDataFile download_executable = {
+  "pt.exe", 470411, "9cce82355b466fc0e47c51ae1de4ba850a666b5f12c3831ee19ba5c4c4ef6add"};
+static const char download_url[] = "https://archive.org/download/msdos_Pizza_Tycoon_1994/Pizza_Tycoon_1994.zip";
+static const char download_hash[] = "ea5dca5d8eab9008f48b10e8fd0215618df233ce36853067144590bf99cede5f";
+enum { DOWNLOAD_BYTES = 2580572 };
+
+static bool data_hash_matches(const u8 *data, size_t size, const char *expected) {
+  u8 digest[32];
+  char hex[65];
+  const char digits[] = "0123456789abcdef";
+  pt_sha256(data, size, digest);
+  for (unsigned i = 0; i < 32; ++i) {
+    hex[2 * i] = digits[digest[i] >> 4];
+    hex[2 * i + 1] = digits[digest[i] & 15];
+  }
+  hex[64] = 0;
+  return !strcmp(hex, expected);
+}
+bool pt_game_data_verify_installation(const char *directory, FILE *errors) {
+  if (!pt_game_data_verify_directory(directory, errors))
+    return false;
+  PTGameDataDirectory reader = {.root = directory};
+  const u8 *data;
+  size_t size;
+  bool okay = false;
+  const char *names[] = {"pt.exe", "pt_original.exe"};
+  for (unsigned i = 0; i < 2 && !okay; ++i)
+    okay = read_directory(&reader, names[i], &data, &size) && size == download_executable.size &&
+        data_hash_matches(data, size, download_executable.sha256);
+  free(reader.bytes);
+  if (!okay && errors)
+    fputs("Game data: the verified English DOS V2.0 executable is missing or incompatible.\n", errors);
+  return okay;
+}
+static u16 zip_word(const u8 *p) {
+  return (u16)(p[0] | (u16)p[1] << 8);
+}
+static u32 zip_dword(const u8 *p) {
+  return (u32)zip_word(p) | (u32)zip_word(p + 2) << 16;
+}
+static bool zip_range(size_t at, size_t length, size_t size) {
+  return at <= size && length <= size - at;
+}
+static u8 *download_zip_file(const u8 *zip, size_t size, const char *name, size_t expected) {
+  if (size < 22)
+    return NULL;
+  size_t end_at = size - 22, earliest = size > 65557 ? size - 65557 : 0;
+  while (zip_dword(zip + end_at) != 0x06054b50 || zip_word(zip + end_at + 20) != size - end_at - 22) {
+    if (end_at == earliest)
+      return NULL;
+    --end_at;
+  }
+  const u8 *end = zip + end_at;
+  u16 count = zip_word(end + 10);
+  size_t at = zip_dword(end + 16), extent = zip_dword(end + 12);
+  if (zip_word(end + 4) || zip_word(end + 6) || count != zip_word(end + 8) || !zip_range(at, extent, end_at) ||
+      at + extent != end_at)
+    return NULL;
+  char wanted[1024];
+  if (snprintf(wanted, sizeof(wanted), "PizzaTyc/PIZZA/%s", name) >= (int)sizeof(wanted))
+    return NULL;
+  const u8 *selected = NULL;
+  for (unsigned i = 0; i < count; ++i) {
+    if (!zip_range(at, 46, end_at) || zip_dword(zip + at) != 0x02014b50)
+      return NULL;
+    const u8 *record = zip + at;
+    size_t width = zip_word(record + 28), extra = zip_word(record + 30), comment = zip_word(record + 32);
+    if (!zip_range(at + 46, width + extra + comment, end_at))
+      return NULL;
+    if (width == strlen(wanted) && !strncasecmp((const char *)record + 46, wanted, width)) {
+      if (selected)
+        return NULL;
+      selected = record;
+    }
+    at += 46 + width + extra + comment;
+  }
+  if (at != end_at || !selected || zip_word(selected + 8) & 1 || zip_dword(selected + 24) != expected)
+    return NULL;
+  size_t compressed = zip_dword(selected + 20), offset = zip_dword(selected + 42);
+  if (!zip_range(offset, 30, size) || zip_dword(zip + offset) != 0x04034b50)
+    return NULL;
+  size_t name_size = zip_word(zip + offset + 26), extra_size = zip_word(zip + offset + 28);
+  if (!zip_range(offset + 30, name_size + extra_size, size) || name_size != strlen(wanted) ||
+      strncasecmp((const char *)zip + offset + 30, wanted, name_size))
+    return NULL;
+  offset += 30 + name_size + extra_size;
+  if (!zip_range(offset, compressed, size))
+    return NULL;
+  u8 *data = malloc(expected ? expected : 1);
+  if (!data)
+    return NULL;
+  unsigned method = zip_word(selected + 10);
+  bool okay = false;
+  if (method == 0 && compressed == expected) {
+    memcpy(data, zip + offset, expected);
+    okay = true;
+  } else if (method == 8) {
+    unsigned long output = (unsigned long)expected, input = (unsigned long)compressed;
+    okay = !puff(data, &output, zip + offset, &input) && output == expected && input == compressed;
+  }
+  if (!okay) {
+    free(data);
+    return NULL;
+  }
+  return data;
+}
+static char *download_path(const char *directory, const char *name) {
+  size_t size = strlen(directory) + strlen(name) + 2;
+  char *path = malloc(size);
+  if (path)
+    snprintf(path, size, "%s/%s", directory, name);
+  return path;
+}
+static bool download_parent_directories(char *path) {
+  for (char *at = path + 1; *at; ++at) {
+    bool slash = *at == '/';
+#ifdef _WIN32
+    slash = slash || *at == '\\';
+#endif
+    if (!slash || (at == path + 2 && path[1] == ':'))
+      continue;
+    char separator = *at;
+    *at = 0;
+    int result = pt_host_mkdir(path), error = errno;
+    *at = separator;
+    if (result && error != EEXIST)
+      return false;
+  }
+  return true;
+}
+static void download_cleanup(const char *stage) {
+  size_t count = pt_game_data_file_count();
+  for (size_t i = 0; i < count + 2; ++i) {
+    const char *name = i < count ? required_files[i].name : i == count ? "pt.exe" : "sound.cfg";
+    char *path = download_path(stage, name);
+    if (path)
+      pt_host_remove(path);
+    free(path);
+  }
+  for (size_t i = 0; i < count; ++i) {
+    char *path = download_path(stage, required_files[i].name);
+    if (!path)
+      continue;
+    char *slash = strrchr(path, '/');
+    while (slash && (size_t)(slash - path) > strlen(stage)) {
+      *slash = 0;
+      pt_host_rmdir(path);
+      slash = strrchr(path, '/');
+    }
+    free(path);
+  }
+  pt_host_rmdir(stage);
+}
+static PTGameDataInstallResult download_install(
+    const u8 *zip, size_t size, const char *directory, PTGameDataProgress progress, void *context) {
+  if (size != DOWNLOAD_BYTES || !data_hash_matches(zip, size, download_hash)) {
+    fputs("Game data: Internet Archive ZIP checksum mismatch; nothing was installed.\n", stderr);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  if (!directory || !*directory || pt_host_path_exists(directory)) {
+    fputs("Game data: choose a new installation directory; existing files are never overwritten.\n", stderr);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  size_t width = strlen(directory) + 24;
+  char *stage = malloc(width);
+  if (!stage)
+    return PT_GAME_DATA_INSTALL_FAILED;
+  snprintf(stage, width, "%s.partial-XXXXXX", directory);
+  if (!download_parent_directories(stage)) {
+    free(stage);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  int descriptor = pt_host_tempfile(stage);
+  if (descriptor < 0) {
+    free(stage);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  close(descriptor);
+  pt_host_remove(stage);
+  if (pt_host_mkdir(stage)) {
+    free(stage);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  PTGameDataInstallResult result = PT_GAME_DATA_INSTALL_FAILED;
+  size_t count = pt_game_data_file_count();
+  for (size_t i = 0; i < count + 2; ++i) {
+    PTGameDataFile config = {"sound.cfg", 18, NULL};
+    const PTGameDataFile *file = i < count ? &required_files[i] : i == count ? &download_executable : &config;
+    if (progress && !progress(context, 1, i, count + 2)) {
+      result = PT_GAME_DATA_CANCELED;
+      goto done;
+    }
+    u8 *data = download_zip_file(zip, size, file->name, file->size);
+    char *path = download_path(stage, file->name);
+    bool okay = data && path && (!file->sha256 || data_hash_matches(data, file->size, file->sha256));
+    FILE *output = okay && download_parent_directories(path) ? pt_host_fopen(path, "wb") : NULL;
+    okay = output && fwrite(data, 1, file->size, output) == file->size;
+    if (output && fclose(output))
+      okay = false;
+    free(path);
+    free(data);
+    if (!okay)
+      goto done;
+  }
+  if (progress && !progress(context, 1, count + 2, count + 2)) {
+    result = PT_GAME_DATA_CANCELED;
+    goto done;
+  }
+  if (!pt_game_data_verify_installation(stage, stderr) || !pt_host_rename_new(stage, directory))
+    goto done;
+  result = PT_GAME_DATA_INSTALLED;
+done:
+  if (result != PT_GAME_DATA_INSTALLED) {
+    download_cleanup(stage);
+    if (result != PT_GAME_DATA_CANCELED)
+      fputs("Game data: download installation failed; no existing files were changed.\n", stderr);
+  }
+  free(stage);
+  return result;
+}
+PTGameDataInstallResult pt_game_data_install_archive(
+    const char *archive, const char *directory, PTGameDataProgress progress, void *context) {
+  u8 *data = malloc(DOWNLOAD_BYTES + 1);
+  FILE *input = pt_host_fopen(archive, "rb");
+  if (!data || !input) {
+    free(data);
+    if (input)
+      fclose(input);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  size_t size = fread(data, 1, DOWNLOAD_BYTES + 1, input);
+  bool okay = !ferror(input);
+  if (fclose(input))
+    okay = false;
+  PTGameDataInstallResult result =
+      okay ? download_install(data, size, directory, progress, context) : PT_GAME_DATA_INSTALL_FAILED;
+  free(data);
+  return result;
+}
+typedef struct PTDownloadContext {
+  PTGameDataProgress progress;
+  void *context;
+  bool canceled;
+} PTDownloadContext;
+static bool download_progress(void *opaque, size_t done, size_t total) {
+  PTDownloadContext *transfer = opaque;
+  if (transfer->progress && !transfer->progress(transfer->context, 0, done, total))
+    transfer->canceled = true;
+  return !transfer->canceled;
+}
+PTGameDataInstallResult pt_game_data_download(const char *directory, PTGameDataProgress progress, void *context) {
+  if (!directory || !*directory || pt_host_path_exists(directory)) {
+    fputs("Game data: choose a new installation directory; existing files are never overwritten.\n", stderr);
+    return PT_GAME_DATA_INSTALL_FAILED;
+  }
+  u8 *data = malloc(DOWNLOAD_BYTES);
+  if (!data)
+    return PT_GAME_DATA_INSTALL_FAILED;
+  PTDownloadContext transfer = {progress, context, false};
+  size_t size = 0;
+  bool okay = pt_host_https_download(download_url, data, DOWNLOAD_BYTES, &size, download_progress, &transfer);
+  PTGameDataInstallResult result = transfer.canceled ? PT_GAME_DATA_CANCELED
+      : okay                                         ? download_install(data, size, directory, progress, context)
+                                                     : PT_GAME_DATA_INSTALL_FAILED;
+  free(data);
+  if (!okay && !transfer.canceled)
+    fputs("Game data: Internet Archive download failed. Check your connection and retry.\n", stderr);
+  return result;
+}
+
 // Sha256.
 
 static u32 rotate_right(u32 value, unsigned count) {

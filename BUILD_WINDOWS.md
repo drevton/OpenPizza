@@ -10,7 +10,9 @@ The helper downloads the official SDL2 2.32.10 MinGW SDK and verifies its SHA-25
 Use `--sdl-dir` with an already downloaded SDK. The ZIP contains binaries, licenses,
 complete corresponding program source and media conversion scripts. No game assets
 are included. Copy your verified English DOS V2.0 installation into `PIZZA` beside
-the launcher, or set an absolute `PT_GAME_DATA_DIR`.
+the launcher, or set an absolute `PT_GAME_DATA_DIR`. If assets are absent, the game
+offers to download and verify the matching Internet Archive release after you opt in.
+Downloads are installed in the per-user game-data folder and reused on later launches.
 
 The launcher displays missing/invalid asset errors, keeps per-user saves and logs in
 `%LOCALAPPDATA%\Pizza Tycoon`, and prevents two instances sharing a save directory.

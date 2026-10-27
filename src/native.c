@@ -221,6 +221,10 @@ static bool audio_until(u64 target, u64 *position, u32 ticks, unsigned frame, bo
   return true;
 }
 int pt_native_app_run(int argc, char **argv) {
+  if (argc == 3 && !strcmp(argv[1], "--download-data"))
+    return pt_game_data_download(argv[2], NULL, NULL) == PT_GAME_DATA_INSTALLED ? 0 : 2;
+  if (argc == 4 && !strcmp(argv[1], "--install-data-archive"))
+    return pt_game_data_install_archive(argv[2], argv[3], NULL, NULL) == PT_GAME_DATA_INSTALLED ? 0 : 2;
   if (argc == 3 && !strcmp(argv[1], "--check-data")) {
     if (!pt_game_data_verify_directory(argv[2], stderr))
       return 2;
@@ -246,16 +250,24 @@ int pt_native_app_run(int argc, char **argv) {
       return 2;
     }
   }
-  if (!boot) {
-    fprintf(stderr, "Game assets are required; use --data DIRECTORY.\n");
+  if (!boot)
+    boot = getenv("PT_GAME_DATA_DIR");
+  if (!boot || !*boot)
+    boot = "PIZZA";
+  bool installed = false;
+  char *game_data = pt_game_data_find_directory(boot, &installed);
+  if (!installed && !pt_display_download_game_data(game_data, pt_game_data_download)) {
+    free(game_data);
     return 2;
   }
   PTNativeAssetsInfo context;
-  bool loaded = pt_native_assets_load(boot, &context);
+  bool loaded = pt_native_assets_load(game_data, &context);
   if (!loaded) {
-    fprintf(stderr, "Cannot load game assets: %s\n", boot);
+    fprintf(stderr, "Cannot load game assets: %s\n", game_data);
+    free(game_data);
     return 2;
   }
+  free(game_data);
   if (disk_path && !pt_native_disk_open(disk_path)) {
     fprintf(stderr, "Cannot import DOS disk: %s\n", disk_path);
     pt_frame_reset();

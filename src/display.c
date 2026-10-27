@@ -5,6 +5,7 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include "display.h"
+#include "game_data.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -952,4 +953,110 @@ void pt_display_delay(unsigned milliseconds) {
 }
 const char *pt_display_error(void) {
   return SDL_GetError();
+}
+
+// Installation is independent of simulation state and completes before any game resources are loaded.
+typedef struct PTDataDownload {
+  const char *directory;
+  PTGameDataInstallResult (*download)(const char *, PTGameDataProgress, void *);
+  SDL_atomic_t complete, cancel, percent, phase;
+  PTGameDataInstallResult result;
+} PTDataDownload;
+static bool data_progress(void *opaque, unsigned phase, size_t done, size_t total) {
+  PTDataDownload *state = opaque;
+  SDL_AtomicSet(&state->phase, (int)phase);
+  SDL_AtomicSet(&state->percent, total ? (int)(done * 100 / total) : 0);
+  return !SDL_AtomicGet(&state->cancel);
+}
+static int data_download_thread(void *opaque) {
+  PTDataDownload *state = opaque;
+  state->result = state->download(state->directory, data_progress, state);
+  SDL_AtomicSet(&state->complete, 1);
+  return 0;
+}
+bool pt_display_download_game_data(
+    const char *destination, PTGameDataInstallResult (*download)(const char *, PTGameDataProgress, void *)) {
+  SDL_SetMainReady();
+  if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+    return false;
+  }
+  if (!destination) {
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+        "Pizza Tycoon",
+        "Cannot find a writable user game-data location. Supply your English DOS V2.0 files using --data.",
+        NULL);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+    return false;
+  }
+  size_t length = strlen(destination) + 700;
+  char *message = malloc(length);
+  if (!message) {
+    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+    return false;
+  }
+  snprintf(message,
+      length,
+      "The required Pizza Tycoon English DOS V2.0 game files are missing or incompatible.\n\n"
+      "Download them from the Internet Archive? (About 2.6 MB)\n"
+      "Source: archive.org/details/msdos_Pizza_Tycoon_1994\n\n"
+      "The ZIP and all required files will be checked by SHA-256 before installation.\n"
+      "Existing files will not be overwritten.\n\nInstall in:\n%s",
+      destination);
+  const SDL_MessageBoxButtonData buttons[] = {
+    {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "Cancel"},
+    {0, 1, "Download"}};
+  const SDL_MessageBoxData prompt = {.flags = SDL_MESSAGEBOX_INFORMATION,
+    .title = "Pizza Tycoon game files",
+    .message = message,
+    .numbuttons = 2,
+    .buttons = buttons};
+  int choice = 0;
+  int shown = SDL_ShowMessageBox(&prompt, &choice);
+  free(message);
+  bool okay = false;
+  if (!shown && choice == 1) {
+    SDL_Window *progress = SDL_CreateWindow("Downloading game files - Escape to cancel",
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
+        480,
+        80,
+        SDL_WINDOW_SHOWN);
+    PTDataDownload state = {.directory = destination, .download = download, .result = PT_GAME_DATA_INSTALL_FAILED};
+    SDL_Thread *thread = progress ? SDL_CreateThread(data_download_thread, "game-data", &state) : NULL;
+    if (thread) {
+      while (!SDL_AtomicGet(&state.complete)) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+          if (event.type == SDL_QUIT || (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE))
+            SDL_AtomicSet(&state.cancel, 1);
+        }
+        char title[100];
+        snprintf(title,
+            sizeof(title),
+            "%s game files: %d%% - Escape to cancel",
+            SDL_AtomicGet(&state.phase) ? "Installing" : "Downloading",
+            SDL_AtomicGet(&state.percent));
+        SDL_SetWindowTitle(progress, SDL_AtomicGet(&state.cancel) ? "Canceling download..." : title);
+        SDL_Surface *surface = SDL_GetWindowSurface(progress);
+        if (surface) {
+          SDL_FillRect(surface, NULL, SDL_MapRGB(surface->format, 240, 240, 240));
+          SDL_Rect bar = {20, 25, 440 * SDL_AtomicGet(&state.percent) / 100, 30};
+          SDL_FillRect(surface, &bar, SDL_MapRGB(surface->format, 40, 110, 200));
+          SDL_UpdateWindowSurface(progress);
+        }
+        SDL_Delay(40);
+      }
+      SDL_WaitThread(thread, NULL);
+      okay = state.result == PT_GAME_DATA_INSTALLED;
+    }
+    SDL_DestroyWindow(progress);
+    if (!okay && state.result != PT_GAME_DATA_CANCELED)
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+          "Pizza Tycoon download failed",
+          "The game files could not be downloaded, verified or installed. Check your connection and retry.\n\n"
+          "You can also copy your own English DOS V2.0 installation into PIZZA beside the game.",
+          NULL);
+  }
+  SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+  return okay;
 }
