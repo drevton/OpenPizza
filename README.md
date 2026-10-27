@@ -11,9 +11,9 @@ beside `PizzaTycoon.exe`, and run the launcher. `PT_GAME_DATA_DIR` may point to
 another game directory. Missing or incompatible assets produce a message.
 Saves and logs are stored under `%LOCALAPPDATA%\Pizza Tycoon`.
 
-Version 0.1 is an early release. Startup, New Game through the city map and
-native save/load are exercised by release checks. Some gameplay paths still
-stop explicitly when unsupported; full-game parity is not established.
+The public 0.1 checks cover startup, New Game through the city map, and native
+save/load. Complete campaign playthroughs and broader regression comparisons
+have not yet been repeated on this public build.
 Windows builds are smoke-tested with Wine; testing on Windows hardware is pending.
 
 On macOS install SDL2 and run:
