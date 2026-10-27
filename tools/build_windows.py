@@ -112,7 +112,7 @@ def package(output, sdl):
     shutil.copy2(sdl / 'LICENSE.txt', licenses / 'SDL2.txt')
     source = target / 'Source'
     source.mkdir()
-    for name in ('src', 'include', 'vendor', 'tools', 'docs'):
+    for name in ('src', 'vendor', 'tools', 'docs'):
       shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     for name in ('Makefile', 'LICENSE', 'README.md', 'GAME_DATA.md', 'BUILD_WINDOWS.md',
         'SOURCE_LAYOUT.md', '.clang-format', '.gitignore'):

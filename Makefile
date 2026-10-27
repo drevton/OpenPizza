@@ -2,7 +2,8 @@
 CC := clang
 PYTHON ?= python3
 GAME_DATA_DIR ?= PIZZA
-CFLAGS := -std=c11 -O2 -g0 -ffp-contract=off "-ffile-prefix-map=$(CURDIR)=." "-fmacro-prefix-map=$(CURDIR)=." -Wall -Wextra -Werror -Iinclude -I.
+CFLAGS := -std=c11 -O2 -g0 -ffp-contract=off "-ffile-prefix-map=$(CURDIR)=." "-fmacro-prefix-map=$(CURDIR)=." -Wall -Wextra -Werror -Isrc -I.
+CFLAGS += "-ffile-prefix-map=$(CURDIR)=." "-fmacro-prefix-map=$(CURDIR)=."
 CORE := src/game.c
 CORE += src/graphics.c
 CORE += src/text.c
@@ -32,7 +33,7 @@ CORE += src/savegame_initial.c
 CORE += src/runtime_state.c
 CORE += src/ai_day.c
 CORE += src/host_io.c
-NATIVE_HEADERS := $(wildcard include/*.h src/*.def) vendor/pt_opl_adapter.h
+NATIVE_HEADERS := $(wildcard src/*.h src/*.def) vendor/pt_opl_adapter.h
 NATIVE_HEADERS += vendor/nuked-opl3/opl3.h vendor/nuked-opl3/opl3.c
 
 # Native gameplay is compiled directly.
@@ -44,7 +45,7 @@ native: build/pizza-native
 
 WINDOWS_CC ?= x86_64-w64-mingw32-gcc
 WINDOWS_SDL ?= build/windows-deps/SDL2-2.32.10/x86_64-w64-mingw32
-WINDOWS_CFLAGS := -std=c11 -O2 -g0 -Wall -Wextra -Werror -Iinclude -I. -ffp-contract=off
+WINDOWS_CFLAGS := -std=c11 -O2 -g0 -Wall -Wextra -Werror -Isrc -I. -ffp-contract=off
 WINDOWS_CFLAGS += -Wno-unknown-pragmas -Wno-unused-but-set-variable
 WINDOWS_CFLAGS += -Wno-int-in-bool-context -Wno-implicit-fallthrough
 WINDOWS_CFLAGS += "-ffile-prefix-map=$(CURDIR)=." "-fmacro-prefix-map=$(CURDIR)=."
@@ -58,7 +59,7 @@ build/windows:
 build/windows/pizza-native.exe: $(NATIVE_GAME_SOURCES) src/native.c src/display.c $(NATIVE_HEADERS) | build/windows
 	$(WINDOWS_CC) $(WINDOWS_CFLAGS) -I"$(WINDOWS_SDL)/include/SDL2" $(NATIVE_GAME_SOURCES) src/native.c src/display.c -L"$(WINDOWS_SDL)/lib" $(WINDOWS_LDFLAGS) -municode $(WINDOWS_LIBS) -o $@
 
-build/windows/PizzaTycoon.exe: tools/windows_launcher.c include/types.h | build/windows
+build/windows/PizzaTycoon.exe: tools/windows_launcher.c src/types.h | build/windows
 	$(WINDOWS_CC) $(WINDOWS_CFLAGS) $(WINDOWS_LDFLAGS) -municode -mwindows $< -lshell32 -o $@
 
 build:

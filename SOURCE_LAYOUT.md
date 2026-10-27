@@ -2,6 +2,7 @@
 
 Include `pizza.h` for the application entry point, command API and frame output.
 Game implementation code includes the header for the subsystem it calls.
+Game headers live in `src/` beside their corresponding C files.
 Headers are self-contained; callers do not need to assemble an include order.
 
 The native game now has 31 C files and 43 headers, reduced from 155 C files and

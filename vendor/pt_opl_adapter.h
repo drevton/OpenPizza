@@ -3,7 +3,7 @@
 #include "nuked-opl3/opl3.h"
 #include <stdbool.h>
 #include <stddef.h>
-#include "../include/types.h"
+#include "../src/types.h"
 #include <string.h>
 // Shared hardware model only. Native game logic and original x86 keep
 // independent instances; snapshots replace host pointers with chip offsets.
